@@ -1,0 +1,88 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <DHT.h>
+
+// --- OLED Display Settings ---
+#define SCREEN_WIDTH 128 
+#define SCREEN_HEIGHT 64 
+#define OLED_RESET -1 
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// --- DHT11 Sensor Settings ---
+#define DHTPIN 13        // DHT Data Pin connected to GPIO 13
+#define DHTTYPE DHT11    
+DHT dht(DHTPIN, DHTTYPE);
+
+// --- Active Buzzer Settings ---
+#define BUZZER_PIN 12    // Active Buzzer connected to GPIO 12
+#define HUMIDITY_ALERT_THRESHOLD 80.0  // Trigger beep if humidity >= 80%
+
+void setup() {
+  Serial.begin(115200);
+
+  // Initialize Active Buzzer pin as output
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW); // Keep buzzer OFF at start
+
+  // Initialize DHT11
+  dht.begin();
+
+  // Initialize OLED
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
+    Serial.println(F("OLED allocation failed. Check wiring!"));
+    for(;;); 
+  }
+
+  display.setTextColor(SSD1306_WHITE);
+}
+
+void loop() {
+  // Read the REAL live humidity from the sensor
+  float realHumidity = dht.readHumidity();
+
+  display.clearDisplay();
+  
+  // Header and Connection UI
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println("--- K9 PROTECTION ---");
+  display.println();
+  display.println("Wi-Fi:     CONNECTED");
+  display.println("Bluetooth: CONNECTED");
+  display.println(); 
+  
+  // Live Humidity Display
+  display.setTextSize(2);
+  
+  if (isnan(realHumidity)) {
+    display.println("Hum: ERR");
+    digitalWrite(BUZZER_PIN, LOW); // Turn off buzzer if sensor errors out
+  } else {
+    display.print("Hum: ");
+    display.print((int)realHumidity);
+    display.println("%");
+
+    // Check if real humidity hits or passes 80%
+    if (realHumidity >= HUMIDITY_ALERT_THRESHOLD) {
+      display.setTextSize(1);
+      display.println(">> HIGH HUMIDITY! <<");
+
+      // Double-beep sequence for ACTIVE buzzer
+      digitalWrite(BUZZER_PIN, HIGH); // Sound ON
+      delay(150);
+      digitalWrite(BUZZER_PIN, LOW);  // Sound OFF
+      delay(100);
+      digitalWrite(BUZZER_PIN, HIGH); // Sound ON
+      delay(150);
+      digitalWrite(BUZZER_PIN, LOW);  // Sound OFF
+    } else {
+      digitalWrite(BUZZER_PIN, LOW);  // Keep buzzer OFF when below 80%
+    }
+  }
+
+  display.display();
+
+  // Wait 2.5 seconds (DHT11 needs time between reads)
+  delay(2500);
+}
