@@ -1,0 +1,134 @@
+// 1. BLYNK CREDENTIALS (REPLACE WITH YOURS)
+#define BLYNK_TEMPLATE_ID "TMPLxxxxxx"
+#define BLYNK_DEVICE_NAME "My Tracker"
+#define BLYNK_AUTH_TOKEN "Your_Blynk_Auth_Token"
+
+#define BLYNK_PRINT Serial
+
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <BlynkSimpleEsp32.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include "DHT.h"
+#include <Adafruit_MLX90614.h>
+
+// 2. WIFI CREDENTIALS (REPLACE WITH YOURS)
+char ssid[] = "Your_WiFi_SSID";
+char pass[] = "Your_WiFi_Password";
+
+// --- PIN DEFINITIONS ---
+#define DHTPIN 4
+#define DHTTYPE DHT11
+#define BUZZER_PIN 5
+#define SWITCH_PIN_A 26
+#define SWITCH_PIN_B 27
+
+// --- OBJECT INITIALIZATIONS ---
+DHT dht(DHTPIN, DHTTYPE);
+Adafruit_MLX90614 mlx = Adafruit_MLX90614();
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+BlynkTimer timer;
+
+// --- BUZZER LOGIC ---
+void startBuzzerCycle() {
+  digitalWrite(BUZZER_PIN, HIGH);
+  timer.setTimeout(30000L, stopBuzzer); // Turn off after 30 seconds
+}
+
+void stopBuzzer() {
+  digitalWrite(BUZZER_PIN, LOW);
+}
+
+// --- SENSOR & SWITCH LOGIC ---
+void sendSensorData() {
+  // Read DHT11
+  float h = dht.readHumidity();
+  float t = dht.readTemperature(); // Celsius
+  
+  // Read MLX90614
+  float objTemp = mlx.readObjectTempC();
+
+  // Read Rocker Switch (LOW means the switch is pressed to that side because we connected center to GND)
+  bool stateA = digitalRead(SWITCH_PIN_A);
+  bool stateB = digitalRead(SWITCH_PIN_B);
+  String switchStatus = "CENTER (OFF)";
+  
+  if (stateA == LOW) {
+    switchStatus = "POS 1 (ON)";
+  } else if (stateB == LOW) {
+    switchStatus = "POS 2 (ON)";
+  }
+
+  // Send to Blynk Virtual Pins 
+  Blynk.virtualWrite(V0, t);             // DHT11 Temp
+  Blynk.virtualWrite(V1, h);             // DHT11 Humidity
+  Blynk.virtualWrite(V2, objTemp);       // IR Object Temp
+  Blynk.virtualWrite(V3, switchStatus);  // Switch Status string
+
+  // Update OLED Display
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  
+  display.setCursor(0, 0);
+  display.print("Env Temp: "); display.print(t); display.print(" C");
+  
+  display.setCursor(0, 15);
+  display.print("Humidity: "); display.print(h); display.print(" %");
+
+  display.setCursor(0, 30);
+  display.print("IR Obj:   "); display.print(objTemp); display.print(" C");
+
+  display.setCursor(0, 45);
+  display.print("Mode: "); display.print(switchStatus);
+
+  display.display();
+}
+
+void setup() {
+  Serial.begin(115200);
+  
+  // Initialize Hardware Pins
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+  
+  // INPUT_PULLUP applies an internal resistor to 3.3v, preventing floating pins
+  pinMode(SWITCH_PIN_A, INPUT_PULLUP);
+  pinMode(SWITCH_PIN_B, INPUT_PULLUP);
+
+  // Initialize DHT
+  dht.begin();
+
+  // Initialize I2C (Pins 21 SDA, 22 SCL)
+  Wire.begin();
+
+  // Initialize MLX90614
+  if (!mlx.begin()) {
+    Serial.println("Error connecting to MLX sensor.");
+  }
+
+  // Initialize OLED
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("SSD1306 allocation failed"));
+  }
+  display.clearDisplay();
+  display.display();
+
+  // Initialize Blynk
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+
+  // Set up Timers
+  timer.setInterval(2000L, sendSensorData); // Update sensors every 2 seconds
+  timer.setInterval(33000L, startBuzzerCycle); // 30s ON, 3s OFF Buzzer loop
+}
+
+void loop() {
+  Blynk.run();
+  timer.run();
+}
