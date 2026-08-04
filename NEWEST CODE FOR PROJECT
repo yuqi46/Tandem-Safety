@@ -1,0 +1,133 @@
+#define BLYNK_TEMPLATE_ID "TMPLxxxxxx"
+#define BLYNK_DEVICE_NAME "Temp Sensor"
+#define BLYNK_AUTH_TOKEN "XWNeaVRNGAgJ564VbM1KPDLZQWSHp2SD"
+
+#define BLYNK_PRINT Serial
+
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <BlynkSimpleEsp32.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include "DHT.h"
+#include <Adafruit_MLX90614.h>
+
+
+char ssid[] = "JJ";
+char pass[] = "life360abc";
+
+
+#define DHTPIN 4
+#define DHTTYPE DHT11
+#define BUZZER_PIN 5
+#define SWITCH_PIN_A 26
+#define SWITCH_PIN_B 27
+
+
+DHT dht(DHTPIN, DHTTYPE);
+Adafruit_MLX90614 mlx = Adafruit_MLX90614();
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+BlynkTimer timer;
+
+
+void startBuzzerCycle() {
+  digitalWrite(BUZZER_PIN, HIGH);
+  timer.setTimeout(30000L, stopBuzzer);
+}
+
+void stopBuzzer() {
+  digitalWrite(BUZZER_PIN, LOW);
+}
+
+
+void sendSensorData() {
+
+  float h = dht.readHumidity();
+  float t = dht.readTemperature();
+  
+
+  float objTemp = mlx.readObjectTempC();
+
+
+  bool stateA = digitalRead(SWITCH_PIN_A);
+  bool stateB = digitalRead(SWITCH_PIN_B);
+  String switchStatus = "CENTER (OFF)";
+  
+  if (stateA == LOW) {
+    switchStatus = "POS 1 (ON)";
+  } else if (stateB == LOW) {
+    switchStatus = "POS 2 (ON)";
+  }
+
+ 
+  Blynk.virtualWrite(V0, t);           
+  Blynk.virtualWrite(V1, h);            
+  Blynk.virtualWrite(V2, objTemp);       
+  Blynk.virtualWrite(V3, switchStatus);  
+
+  
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  
+  display.setCursor(0, 0);
+  display.print("Env Temp: "); display.print(t); display.print(" C");
+  
+  display.setCursor(0, 15);
+  display.print("Humidity: "); display.print(h); display.print(" %");
+
+  display.setCursor(0, 30);
+  display.print("IR Obj:   "); display.print(objTemp); display.print(" C");
+
+  display.setCursor(0, 45);
+  display.print("Mode: "); display.print(switchStatus);
+
+  display.display();
+}
+
+void setup() {
+  Serial.begin(115200);
+  
+  
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+  
+  
+  pinMode(SWITCH_PIN_A, INPUT_PULLUP);
+  pinMode(SWITCH_PIN_B, INPUT_PULLUP);
+
+ 
+  dht.begin();
+
+  
+  Wire.begin();
+
+ 
+  if (!mlx.begin()) {
+    Serial.println("Error connecting to MLX sensor.");
+  }
+
+ 
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("SSD1306 allocation failed"));
+  }
+  display.clearDisplay();
+  display.display();
+
+
+ Blynk.begin(XWNeaVRNGAgJ564VbM1KPDLZQWSHp2SD,JJ,life360);
+
+ 
+  timer.setInterval(2000L, sendSensorData);     
+  timer.setInterval(33000L, startBuzzerCycle); 
+}
+
+void loop() {
+  Blynk.run();
+  timer.run();
+}
