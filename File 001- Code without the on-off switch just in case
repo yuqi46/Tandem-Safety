@@ -1,0 +1,93 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+// Screen dimensions
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+
+// Reset pin (-1 if sharing ESP32 reset pin)
+#define OLED_RESET -1
+
+// Standard I2C address for 128x64 OLEDs is 0x3C (sometimes 0x3D)
+#define SCREEN_ADDRESS 0x3C
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+int testCounter = 0;
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("\n--- OLED DISPLAY TEST ---");
+
+  // Initialize I2C on standard ESP32 pins (SDA = 21, SCL = 22)
+  Wire.begin(21, 22);
+
+  // Initialize the OLED display
+  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println(F("CRITICAL ERROR: OLED allocation failed!"));
+    Serial.println(F("1. Check wiring (SDA -> GPIO 21, SCL -> GPIO 22)."));
+    Serial.println(F("2. Verify power/GND connections."));
+    while (true); // Freeze execution if screen fails
+  }
+
+  Serial.println(F("OLED initialized successfully!"));
+
+  // Show splash test
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  
+  // Draw decorative outer border
+  display.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SSD1306_WHITE);
+
+  // Display test text
+  display.setCursor(12, 10);
+  display.println("GME 12864-13 OLED");
+  
+  display.setCursor(24, 25);
+  display.println("TEST PASSED!");
+
+  display.display();
+  delay(2000);
+}
+
+void loop() {
+  display.clearDisplay();
+
+  // Outer Border
+  display.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SSD1306_WHITE);
+
+  // Header Title
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(18, 8);
+  display.println("ESP32 OLED TEST");
+
+  // Divider Line
+  display.drawLine(10, 20, 118, 20, SSD1306_WHITE);
+
+  // Counter Display
+  display.setCursor(15, 30);
+  display.print("Uptime: ");
+  display.print(testCounter);
+  display.print(" sec");
+
+  // Live status animation block
+  if (testCounter % 2 == 0) {
+    display.fillRect(15, 45, 98, 10, SSD1306_WHITE);
+    display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
+    display.setCursor(35, 46);
+    display.print("WORKING...");
+  } else {
+    display.drawRect(15, 45, 98, 10, SSD1306_WHITE);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(35, 46);
+    display.print("WORKING...");
+  }
+
+  display.display();
+
+  testCounter++;
+  delay(1000);
+}
