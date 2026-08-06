@@ -1,0 +1,150 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <DHT.h>
+#include <Adafruit_MLX90614.h>
+#include <WiFi.h>
+#include "BluetoothSerial.h"
+
+
+#define I2C_SDA     21    
+#define I2C_SCL     22   
+#define DHTPIN      4    
+#define BUTTON_PIN  13   
+#define BUZZER_PIN  12   
+#define DHTTYPE     DHT11
+
+
+const char* ssid     = "nyu";    
+const char* password = "jm11179"; 
+BluetoothSerial SerialBT;
+
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET    -1
+#define OLED_ADDRESS  0x3C
+
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+DHT dht(DHTPIN, DHTTYPE);
+Adafruit_MLX90614 mlx = Adafruit_MLX90614();
+
+
+bool isFahrenheit = false;
+bool lastButtonState = HIGH;
+
+void setup() {
+  Serial.begin(115200);
+
+  
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+
+  
+  SerialBT.begin("Tandem Safety");
+  Serial.println(F("Bluetooth Started! Pair with Tandem-Safety'"));
+
+ 
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(nyu,jm11179);
+
+ 
+  Wire.begin(I2C_SDA, I2C_SCL);
+  Wire.setClock(50000);
+
+ 
+  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS)) {
+    Serial.println(F("OLED Display initialization failed!"));
+  }
+
+ 
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setCursor(10, 20);
+  display.println(F("Tandem-Safety System"));
+  display.setCursor(10, 35);
+  display.println(F("Booting up..."));
+  display.display();
+
+ 
+  dht.begin();
+  mlx.begin();
+
+ 
+  tone(BUZZER_PIN, 1000, 150); 
+  delay(1500);
+}
+
+void loop() {
+
+  bool currentButtonState = digitalRead(BUTTON_PIN);
+  if (lastButtonState == HIGH && currentButtonState == LOW) {
+    isFahrenheit = !isFahrenheit;  
+    tone(BUZZER_PIN, 2000, 80);    
+    delay(50);                    
+  }
+  lastButtonState = currentButtonState;
+
+
+  float airTemp  = dht.readTemperature(isFahrenheit);
+  float humidity = dht.readHumidity();
+  float irTemp   = isFahrenheit ? mlx.readObjectTempF() : mlx.readObjectTempC();
+
+  String unitStr = isFahrenheit ? " F" : " C";
+
+ 
+  String logData = "Air: " + String(airTemp, 1) + unitStr +
+                   " | Hum: " + String(humidity, 1) + " %" +
+                   " | IR: " + String(irTemp, 1) + unitStr;
+
+
+  Serial.println(logData);
+
+ 
+  if (SerialBT.hasClient()) {
+    SerialBT.println(logData);
+  }
+
+  
+  display.clearDisplay();
+  display.setTextSize(1);
+
+
+  display.setCursor(0, 0);
+  display.print(F("ELECS4U"));
+
+ 
+  display.setCursor(85, 0);
+  if (WiFi.status() == WL_CONNECTED) {
+    display.print(F("[WiFi]"));
+  } else {
+    display.print(F("[BT]"));
+  }
+
+  display.drawLine(0, 10, 128, 10, SSD1306_WHITE);
+
+ 
+  display.setCursor(0, 16);
+  display.print(F("Air Temp: "));
+  if (isnan(airTemp)) display.println("--" + unitStr);
+  else { display.print(airTemp, 1); display.println(unitStr); }
+
+
+  display.setCursor(0, 32);
+  display.print(F("Humidity: "));
+  if (isnan(humidity)) display.println(F("-- %"));
+  else { display.print(humidity, 1); display.println(F(" %")); }
+
+
+  display.setCursor(0, 48);
+  display.print(F("IR Temp : "));
+  if (isnan(irTemp)) display.println("--" + unitStr);
+  else { display.print(irTemp, 1); display.println(unitStr); }
+
+ 
+  display.display();
+  delay(200);
+}
